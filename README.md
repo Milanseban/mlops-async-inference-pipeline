@@ -1,77 +1,65 @@
-MLOps Async Inference Pipeline
-Overview
+# MLOps Async Inference Pipeline
 
-This project implements a lightweight asynchronous ML inference pipeline with:
+A lightweight asynchronous ML inference system that simulates production-style job execution, artifact tracking, and pluggable storage backends.
 
-FastAPI-based inference API
+---
 
-Subprocess-based background job execution
+## Overview
 
-Per-run artifact tracking
+This project implements an end-to-end ML inference workflow featuring:
 
-Idempotent job execution
+- FastAPI-based inference API  
+- Asynchronous background job execution via subprocess  
+- Per-run artifact generation and tracking  
+- Idempotent job execution  
+- Pluggable storage backend (Local filesystem or AWS S3)  
+- Dockerized deployment support  
 
-Pluggable artifact storage (Local filesystem or AWS S3)
+The focus of this project is system design and operational ML patterns rather than model complexity.
 
-Docker support for reproducible deployment
+---
 
-The system is designed to simulate how ML inference jobs are triggered, executed, tracked, and stored in production-like environments.
+## Architecture
 
-Architecture Summary
+### Inference Flow
 
-Flow:
+1. Client sends a request to `/infer`  
+2. API:
+   - Validates input  
+   - Generates a unique `run_id`  
+   - Writes request payload to `runtime/requests`  
+   - Triggers `job_runner` asynchronously  
+3. `job_runner`:
+   - Updates status to `running`  
+   - Loads model metadata  
+   - Executes inference logic  
+   - Writes artifact to storage  
+   - Updates status to `completed` or `failed`  
+4. Client polls `/status/{run_id}` to track job progress  
 
-Client sends inference request to /infer
+---
 
-API:
+## Project Structure
 
-Validates payload
-
-Generates unique run_id
-
-Writes request input to runtime/requests
-
-Triggers job_runner asynchronously
-
-job_runner:
-
-Updates status (running)
-
-Loads model metadata
-
-Executes inference logic
-
-Writes artifact to storage
-
-Updates status (completed or failed)
-
-Client polls /status/{run_id} to track job progress
-
-Artifacts are stored either:
-
-Locally in runtime/artifacts/
-
-Or in AWS S3 (via boto3)
-
-Project Structure
+```
 mlops-async-inference-pipeline/
 │
 ├── src/
-│   ├── inference_api.py        # FastAPI server
-│   ├── job_runner.py           # Background job executor
+│   ├── inference_api.py
+│   ├── job_runner.py
 │   └── storage/
-│       ├── base.py             # ArtifactStore abstraction
-│       ├── local.py            # Local filesystem storage
-│       └── s3.py               # S3 storage implementation
+│       ├── base.py
+│       ├── local.py
+│       └── s3.py
 │
 ├── models/
-│   └── model_metadata_v1.json  # Example model metadata
+│   └── model_metadata_v1.json
 │
 ├── examples/
 │   ├── sample_batch_input.json
 │   └── sample_inference_request.json
 │
-├── runtime/                    # Generated at runtime (ignored in git)
+├── runtime/                 # Generated at runtime (gitignored)
 │   ├── artifacts/
 │   ├── requests/
 │   └── statuses/
@@ -79,88 +67,110 @@ mlops-async-inference-pipeline/
 ├── Dockerfile
 ├── requirements.txt
 └── .gitignore
+```
 
-Key Design Decisions
-1. Asynchronous Execution
+---
 
-Inference jobs are executed via subprocess, allowing the API to return immediately while background processing continues.
+## Key Design Concepts
 
-2. Idempotency
+### Asynchronous Execution
 
-Before executing a job, the system checks whether an artifact already exists for a given run_id.
-If it exists, execution is skipped and status is marked completed.
+Inference jobs are executed in a separate subprocess.  
+The API returns immediately after triggering execution, allowing background processing.
 
-3. Storage Abstraction
+### Idempotency
 
-The ArtifactStore base class allows switching between:
+Before executing a job, the system checks whether an artifact already exists for the given `run_id`.  
+If it exists, execution is skipped and the job is marked as completed.
 
-Local filesystem
+### Storage Abstraction
 
-AWS S3
+The `ArtifactStore` base class enables switching between:
 
-This simulates production-ready storage flexibility.
+- Local filesystem storage  
+- AWS S3 storage  
 
-4. Runtime Separation
+This allows environment-dependent configuration without modifying core business logic.
 
-All generated state (requests, statuses, artifacts) lives under runtime/, keeping source code clean and version-controlled.
+### Runtime Separation
 
-Running Locally
-1. Create virtual environment
+All generated files (requests, statuses, artifacts) are stored under `runtime/` and excluded from version control.
+
+---
+
+## Running Locally
+
+### 1. Create virtual environment
+
+```bash
 python -m venv .venv
-.\.venv\Scripts\activate   # Windows
+.\.venv\Scripts\activate
+```
 
-2. Install dependencies
+### 2. Install dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-3. Start API
+### 3. Start API server
+
+```bash
 uvicorn src.inference_api:app --reload
+```
 
+Open:
 
-Visit:
-
+```
 http://127.0.0.1:8000/docs
+```
 
-Example Inference Request
+---
+
+## Example Inference Request
+
+```json
 {
   "values": [1, 2, 3]
 }
+```
 
-Running with Docker
-Build image
+---
+
+## Docker Usage
+
+### Build image
+
+```bash
 docker build -t mlops-async-inference-pipeline .
+```
 
-Run container
+### Run container
+
+```bash
 docker run -p 8000:8000 mlops-async-inference-pipeline
+```
 
+Access:
 
-API will be available at:
-
+```
 http://localhost:8000/docs
+```
 
-Using S3 Storage
+---
 
-Run Docker with environment variables:
+## Running with S3 Backend
 
+```bash
 docker run -p 8000:8000 \
   -e STORE_TYPE=s3 \
   -e S3_BUCKET=your-bucket-name \
-  -e AWS_ACCESS_KEY_ID=your-key \
-  -e AWS_SECRET_ACCESS_KEY=your-secret \
+  -e AWS_ACCESS_KEY_ID=your-access-key \
+  -e AWS_SECRET_ACCESS_KEY=your-secret-key \
   mlops-async-inference-pipeline
+```
+
+Artifacts will be written to the specified S3 bucket under the `artifacts/` prefix.
 
 
-Artifacts will be written to the specified S3 bucket under the artifacts/ prefix.
 
-What This Project Demonstrates
-
-API-triggered ML job execution
-
-Environment-driven configuration
-
-Artifact versioning per run
-
-Idempotent processing
-
-Storage abstraction patterns
-
-Containerized deployment readiness
