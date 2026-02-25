@@ -8,9 +8,9 @@ import sys
 
 app = FastAPI()
 
-# ----------------------------
+
 # Project root + runtime paths
-# ----------------------------
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = PROJECT_ROOT / "runtime"
 

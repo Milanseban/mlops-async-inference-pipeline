@@ -6,9 +6,11 @@ import os
 
 from src.storage import LocalArtifactStore
 
-# ----------------------------
+
+
 # Project root + runtime paths
-# ----------------------------
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = PROJECT_ROOT / "runtime"
 
@@ -18,10 +20,45 @@ ARTIFACTS_DIR = RUNTIME_DIR / "artifacts"
 STATUS_DIR.mkdir(parents=True, exist_ok=True)
 ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
+
+
+# Logging setup
+
+
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 logging.getLogger().setLevel(logging.INFO)
+
+
+
+# Pure inference logic
+
+
+def run_inference(values, multiplier):
+    if not isinstance(values, list):
+        raise TypeError("values must be a list")
+
+    if not values:
+        raise ValueError("Inference input is empty")
+
+    return [v * multiplier for v in values]
+
+
+
+# Model loading logic
+
+
+def load_model(model_path: Path):
+    if not model_path.exists():
+        raise FileNotFoundError("Model metadata not found")
+
+    with model_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+
+# Status writer
 
 
 def write_status(run_id: str, status: str):
@@ -33,6 +70,10 @@ def write_status(run_id: str, status: str):
     }
     with path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
+
+
+
+# Job execution
 
 
 def run_job():
@@ -72,7 +113,9 @@ def run_job():
     write_status(run_id, "running")
 
     try:
+
         # Idempotency check
+
         if store.exists(artifact_key):
             write_status(run_id, "completed")
             logging.info("Artifact already exists. Skipping execution.")
@@ -80,25 +123,31 @@ def run_job():
 
         start_time = datetime.now()
 
+
+        # Load input
+
         with INPUT_PATH.open("r", encoding="utf-8") as f:
             data = json.load(f)
 
         values = data.get("values", [])
-        if not values:
-            raise ValueError("Inference input is empty")
+
+
+        # Load model
 
         model_path = PROJECT_ROOT / "models" / "model_metadata_v1.json"
-        if not model_path.exists():
-            raise FileNotFoundError("Model metadata not found")
-
-        with model_path.open("r", encoding="utf-8") as f:
-            model = json.load(f)
-
+        model = load_model(model_path)
         multiplier = model["multiplier"]
-        predictions = [v * multiplier for v in values]
+
+
+        # Pure inference call
+
+        predictions = run_inference(values, multiplier)
 
         end_time = datetime.now()
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
+
+
+        # Prepare result artifact
 
         result = {
             "run_id": run_id,
@@ -113,7 +162,11 @@ def run_job():
             "predictions": predictions,
         }
 
+
+        # Persist artifact
+
         store.write_json(artifact_key, result)
+
         write_status(run_id, "completed")
 
         logging.info(
